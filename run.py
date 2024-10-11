@@ -167,3 +167,51 @@ if most_recent_file:
 
     # Upload the most recent file to GCP
     upload_blob(bucket_name, most_recent_file, destination_blob_name)
+
+
+
+import os
+import glob
+from google.cloud import storage
+
+# Initialize a storage client (uses default credentials from the environment)
+client = storage.Client()
+
+# Specify the bucket name and the destination path
+bucket_name = 'demsnmsp-avev'
+destination_folder = 'inbox/20241105_general/statewide/'
+
+# Path to the folder where your CSV files are saved
+csv_folder_path = r"C:\Users\brian\Documents\dpnm\AVEV\2024g"
+
+# Function to find the most recent file in the directory
+def get_most_recent_file(folder_path):
+    """Returns the most recent file in the specified folder."""
+    list_of_files = glob.glob(os.path.join(folder_path, '*'))  # Get all files in the folder
+    if not list_of_files:
+        print("No files found in the directory.")
+        return None
+    most_recent_file = max(list_of_files, key=os.path.getmtime)  # Find the file with the latest modification time
+    return most_recent_file
+
+# Function to upload the file to GCP
+def upload_blob(bucket_name, source_file_name, destination_blob_name):
+    """Uploads a file to the specified bucket."""
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+    blob.upload_from_filename(source_file_name)
+
+    print(f"File {source_file_name} uploaded to {destination_blob_name}.")
+
+# Get the most recent file from the folder
+most_recent_file = get_most_recent_file(csv_folder_path)
+
+# If a file is found, upload it
+if most_recent_file:
+    # Extract the filename to use in the destination path
+    file_name = os.path.basename(most_recent_file)
+    destination_blob_name = f"{destination_folder}{file_name}"
+
+    # Upload the most recent file to GCP
+    upload_blob(bucket_name, most_recent_file, destination_blob_name)
+
