@@ -69,7 +69,7 @@ import os
 import glob
 
 # Path to the ChromeDriver
-chrome_driver_path = os.getenv('CHROMEDRIVER_PATH')
+chrome_driver_path = os.path.join(os.path.dirname(__file__), 'chromedriver.exe')
 
 # Set up Chrome options
 download_dir = r"C:\Users\brian\Documents\dpnm\AVEV\2024g"  # Set your desired download path
