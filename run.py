@@ -4,7 +4,7 @@ from email.header import decode_header
 
 # Email login credentials
 username = 'brian@nmdemocrats.org'
-app_password = 'GMAIL_PASS'  # Use your app-specific password
+app_password = os.environ.get('GMAIL_PASS') 
 
 # Connect to Gmail's IMAP server
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
