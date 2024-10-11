@@ -69,7 +69,7 @@ import os
 import glob
 
 # Path to the ChromeDriver
-chrome_driver_path = r"C:\Users\brian\Downloads\chromedriver-win64\chromedriver-win64\chromedriver.exe"
+chrome_driver_path = os.getenv('CHROMEDRIVER_PATH')
 
 # Set up Chrome options
 download_dir = r"C:\Users\brian\Documents\dpnm\AVEV\2024g"  # Set your desired download path
@@ -92,7 +92,6 @@ service = Service(chrome_driver_path)  # Create a Service object with the path t
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
 # Open the link from the email
-absentee_voting_link = "https://voterportal.servis.sos.state.nm.us/AbsenteeRegisterFile.aspx?guid=943ee0ce-c89c-4c7b-90eb-63f67d1519d9"
 driver.get(absentee_voting_link)
 
 # Give the page some time to load
