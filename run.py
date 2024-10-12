@@ -2,10 +2,21 @@ import imaplib
 import email
 from email.header import decode_header
 import os
+import re
+import requests
+import zipfile
+import time
+import glob
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from google.cloud import storage
 
 # Email login credentials
 username = 'brian@nmdemocrats.org'
-app_password = os.environ.get('GMAIL_PASS') 
+app_password = os.environ.get('GMAIL_PASS')
 
 # Connect to Gmail's IMAP server
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
@@ -26,11 +37,9 @@ if email_ids:
     print(f"Found {len(email_ids)} emails matching the search.")
 else:
     print("No emails found with the given phrase.")
+    exit()
+
 print(latest_email_id)
-
-
-
-import re
 
 # Fetch the email content using the latest email ID
 status, msg_data = mail.fetch(latest_email_id, '(RFC822)')
@@ -57,28 +66,31 @@ if link_match:
     print(f"Found link: {absentee_voting_link}")
 else:
     print("No link found in the email.")
+    exit()
 
+# Download and unzip the Chrome headless shell
+chrome_zip_url = 'https://storage.googleapis.com/demsnmsp-uploads/chrome-headless-shell-linux64.zip'
+download_path = '/tmp/chrome-headless-shell-linux64.zip'
+extract_path = '/tmp/chrome-headless-shell'
 
+# Download the zip file from GCP
+response = requests.get(chrome_zip_url)
+with open(download_path, 'wb') as file:
+    file.write(response.content)
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-import time
-import os
-import glob
+# Unzip the file
+with zipfile.ZipFile(download_path, 'r') as zip_ref:
+    zip_ref.extractall(extract_path)
 
-# Path to the ChromeDriver
-chrome_driver_path = os.path.join(os.path.dirname(__file__), 'chromedriver.exe')
+# Make the chrome-headless-shell executable
+os.chmod(os.path.join(extract_path, 'chrome-headless-shell'), 0o755)
 
 # Set up Chrome options
-download_dir = r"C:\Users\brian\Documents\dpnm\AVEV\2024g"  # Set your desired download path
-
-# Ensure the download directory exists
+download_dir = r"/tmp/chrome-downloads"  # Temporary download path for CSV files
 os.makedirs(download_dir, exist_ok=True)
 
 chrome_options = Options()
+chrome_options.binary_location = os.path.join(extract_path, 'chrome-headless-shell')  # Path to Chrome headless shell
 chrome_options.add_experimental_option("prefs", {
     "download.default_directory": download_dir,  # Specify your download directory
     "download.prompt_for_download": False,       # Disable the download prompt
@@ -87,7 +99,7 @@ chrome_options.add_experimental_option("prefs", {
 })
 
 # Set up the service for ChromeDriver
-service = Service(chrome_driver_path)  # Create a Service object with the path to ChromeDriver
+service = Service(os.path.join(extract_path, 'chrome-headless-shell'))  # Use the path to the headless shell
 
 # Set up the browser with the specified options
 driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -107,7 +119,7 @@ email_input.send_keys(Keys.RETURN)
 downloaded_file_path = os.path.join(download_dir, "*.csv")  # Adjust this if needed
 while True:
     time.sleep(1)  # Check every second
-    files = glob.glob(downloaded_file_path)  # Get all csv files in the download directory
+    files = glob.glob(downloaded_file_path)  # Get all CSV files in the download directory
     if files:
         # Check if any of the files are still downloading
         if not any(file.endswith('.crdownload') for file in files):
@@ -116,64 +128,6 @@ while True:
 # Close the browser
 driver.quit()
 
-
-
-
-
-import os
-import glob
-from google.cloud import storage
-
-# Path to your service account key JSON file
-service_account_key_path = r"C:\Users\brian\Documents\JSON_key_google_service_account\BigQuery_creds.json" # Update this with your path
-
-# Initialize a storage client with the service account key
-client = storage.Client.from_service_account_json(service_account_key_path)
-
-# Specify the bucket name and the destination path
-bucket_name = 'demsnmsp-avev'
-destination_folder = 'inbox/20241105_general/statewide/'
-
-# Path to the folder where your CSV files are saved
-csv_folder_path = r"C:\Users\brian\Documents\dpnm\AVEV\2024g"
-
-# Function to find the most recent file in the directory
-def get_most_recent_file(folder_path):
-    """Returns the most recent file in the specified folder."""
-    list_of_files = glob.glob(os.path.join(folder_path, '*'))  # Get all files in the folder
-    if not list_of_files:
-        print("No files found in the directory.")
-        return None
-    most_recent_file = max(list_of_files, key=os.path.getmtime)  # Find the file with the latest modification time
-    return most_recent_file
-
-# Function to upload the file to GCP
-def upload_blob(bucket_name, source_file_name, destination_blob_name):
-    """Uploads a file to the specified bucket."""
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(destination_blob_name)
-    blob.upload_from_filename(source_file_name)
-
-    print(f"File {source_file_name} uploaded to {destination_blob_name}.")
-
-# Get the most recent file from the folder
-most_recent_file = get_most_recent_file(csv_folder_path)
-
-# If a file is found, upload it
-if most_recent_file:
-    # Extract the filename to use in the destination path
-    file_name = os.path.basename(most_recent_file)
-    destination_blob_name = f"{destination_folder}{file_name}"
-
-    # Upload the most recent file to GCP
-    upload_blob(bucket_name, most_recent_file, destination_blob_name)
-
-
-
-import os
-import glob
-from google.cloud import storage
-
 # Initialize a storage client (uses default credentials from the environment)
 client = storage.Client()
 
@@ -181,9 +135,6 @@ client = storage.Client()
 bucket_name = 'demsnmsp-avev'
 destination_folder = 'inbox/20241105_general/statewide/'
 
-# Path to the folder where your CSV files are saved
-csv_folder_path = r"C:\Users\brian\Documents\dpnm\AVEV\2024g"
-
 # Function to find the most recent file in the directory
 def get_most_recent_file(folder_path):
     """Returns the most recent file in the specified folder."""
@@ -203,8 +154,8 @@ def upload_blob(bucket_name, source_file_name, destination_blob_name):
 
     print(f"File {source_file_name} uploaded to {destination_blob_name}.")
 
-# Get the most recent file from the folder
-most_recent_file = get_most_recent_file(csv_folder_path)
+# Get the most recent file from the download directory
+most_recent_file = get_most_recent_file(download_dir)
 
 # If a file is found, upload it
 if most_recent_file:
@@ -214,4 +165,3 @@ if most_recent_file:
 
     # Upload the most recent file to GCP
     upload_blob(bucket_name, most_recent_file, destination_blob_name)
-
