@@ -4,15 +4,10 @@ from email.header import decode_header
 import os
 import re
 import requests
-import zipfile
 import time
 import glob
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from google.cloud import storage
+import zipfile
 
 # Email login credentials
 username = 'brian@nmdemocrats.org'
@@ -68,65 +63,32 @@ else:
     print("No link found in the email.")
     exit()
 
-# Download and unzip the Chrome headless shell
-chrome_zip_url = 'https://storage.googleapis.com/demsnmsp-uploads/chrome-headless-shell-linux64.zip'
-download_path = '/tmp/chrome-headless-shell-linux64.zip'
-extract_path = '/tmp/chrome-headless-shell'
+# Step 2: Submitting your email to the absentee voting link using requests
+data = {
+    'ctl00$MainContent$txtEmail': username  # Submit your email address here
+}
 
-# Download the zip file from GCP
-response = requests.get(chrome_zip_url)
-with open(download_path, 'wb') as file:
-    file.write(response.content)
+# Use requests to submit the form and trigger the file download
+response = requests.post(absentee_voting_link, data=data)
 
-# Unzip the file
-with zipfile.ZipFile(download_path, 'r') as zip_ref:
-    zip_ref.extractall(extract_path)
+# Check for a successful response
+if response.status_code == 200:
+    print("Successfully submitted the email.")
+    # You can check the response headers to see if the file is being downloaded
+    if 'Content-Disposition' in response.headers:
+        # Extract the filename from the headers
+        file_name = response.headers.get('Content-Disposition').split('filename=')[-1].strip('""')
+        download_dir = r"/tmp/chrome-downloads"  # Temporary download path for CSV files
+        os.makedirs(download_dir, exist_ok=True)
 
-# Make the chrome-headless-shell executable
-os.chmod(os.path.join(extract_path, 'chrome-headless-shell'), 0o755)
-
-# Set up Chrome options
-download_dir = r"/tmp/chrome-downloads"  # Temporary download path for CSV files
-os.makedirs(download_dir, exist_ok=True)
-
-chrome_options = Options()
-chrome_options.binary_location = os.path.join(extract_path, 'chrome-headless-shell')  # Path to Chrome headless shell
-chrome_options.add_experimental_option("prefs", {
-    "download.default_directory": download_dir,  # Specify your download directory
-    "download.prompt_for_download": False,       # Disable the download prompt
-    "download.directory_upgrade": True,          # Allow the directory to be upgraded
-    "safebrowsing.enabled": True                  # Enable safe browsing
-})
-
-# Set up the service for ChromeDriver
-service = Service(os.path.join(extract_path, 'chrome-headless-shell'))  # Use the path to the headless shell
-
-# Set up the browser with the specified options
-driver = webdriver.Chrome(service=service, options=chrome_options)
-
-# Open the link from the email
-driver.get(absentee_voting_link)
-
-# Give the page some time to load
-time.sleep(3)
-
-# Find the email input field
-email_input = driver.find_element(By.NAME, "ctl00$MainContent$txtEmail")  # Use the correct name
-email_input.send_keys("brian@nmdemocrats.org")
-email_input.send_keys(Keys.RETURN)
-
-# Wait for the file to download
-downloaded_file_path = os.path.join(download_dir, "*.csv")  # Adjust this if needed
-while True:
-    time.sleep(1)  # Check every second
-    files = glob.glob(downloaded_file_path)  # Get all CSV files in the download directory
-    if files:
-        # Check if any of the files are still downloading
-        if not any(file.endswith('.crdownload') for file in files):
-            break  # Exit the loop if no .crdownload files are found
-
-# Close the browser
-driver.quit()
+        # Save the downloaded file
+        file_path = os.path.join(download_dir, file_name)
+        with open(file_path, 'wb') as file:
+            file.write(response.content)
+        print(f"File saved as {file_name}.")
+else:
+    print("Failed to submit the form or download the file.")
+    exit()
 
 # Initialize a storage client (uses default credentials from the environment)
 client = storage.Client()
