@@ -4,10 +4,9 @@ from email.header import decode_header
 import os
 import re
 import requests
-import time
+import tempfile
 import glob
 from google.cloud import storage
-import zipfile
 
 # Email login credentials
 username = 'brian@nmdemocrats.org'
@@ -33,8 +32,6 @@ if email_ids:
 else:
     print("No emails found with the given phrase.")
     exit()
-
-print(latest_email_id)
 
 # Fetch the email content using the latest email ID
 status, msg_data = mail.fetch(latest_email_id, '(RFC822)')
@@ -63,49 +60,23 @@ else:
     print("No link found in the email.")
     exit()
 
-# Step 2: Submitting your email to the absentee voting link using requests
-data = {
-    'ctl00$MainContent$txtEmail': username  # Submit your email address here
-}
+# Create a temporary directory (works in a virtual environment like Linux or cloud platforms)
+download_dir = tempfile.mkdtemp()  # Creates a unique temporary directory
+csv_file_path = os.path.join(download_dir, "absentee_voting.csv")
 
-# Use requests to submit the form and trigger the file download
-response = requests.post(absentee_voting_link, data=data)
+# Download the CSV file from the absentee voting link and save to the temporary directory
+csv_response = requests.get(absentee_voting_link)
 
-# Check for a successful response
-if response.status_code == 200:
-    print("Successfully submitted the email.")
-    # You can check the response headers to see if the file is being downloaded
-    if 'Content-Disposition' in response.headers:
-        # Extract the filename from the headers
-        file_name = response.headers.get('Content-Disposition').split('filename=')[-1].strip('""')
-        download_dir = r"/tmp/chrome-downloads"  # Temporary download path for CSV files
-        os.makedirs(download_dir, exist_ok=True)
+with open(csv_file_path, 'wb') as file:
+    file.write(csv_response.content)
 
-        # Save the downloaded file
-        file_path = os.path.join(download_dir, file_name)
-        with open(file_path, 'wb') as file:
-            file.write(response.content)
-        print(f"File saved as {file_name}.")
-else:
-    print("Failed to submit the form or download the file.")
-    exit()
+print(f"Downloaded file saved to: {csv_file_path}")
 
 # Initialize a storage client (uses default credentials from the environment)
 client = storage.Client()
 
-# Specify the bucket name and the destination path
-bucket_name = 'demsnmsp-avev'
-destination_folder = 'inbox/20241105_general/statewide/'
-
-# Function to find the most recent file in the directory
-def get_most_recent_file(folder_path):
-    """Returns the most recent file in the specified folder."""
-    list_of_files = glob.glob(os.path.join(folder_path, '*'))  # Get all files in the folder
-    if not list_of_files:
-        print("No files found in the directory.")
-        return None
-    most_recent_file = max(list_of_files, key=os.path.getmtime)  # Find the file with the latest modification time
-    return most_recent_file
+# Specify the bucket name (no folder needed)
+bucket_name = 'demsnmsp-uploads'
 
 # Function to upload the file to GCP
 def upload_blob(bucket_name, source_file_name, destination_blob_name):
@@ -116,14 +87,13 @@ def upload_blob(bucket_name, source_file_name, destination_blob_name):
 
     print(f"File {source_file_name} uploaded to {destination_blob_name}.")
 
-# Get the most recent file from the download directory
-most_recent_file = get_most_recent_file(download_dir)
+# Extract the filename
+file_name = os.path.basename(csv_file_path)
 
-# If a file is found, upload it
-if most_recent_file:
-    # Extract the filename to use in the destination path
-    file_name = os.path.basename(most_recent_file)
-    destination_blob_name = f"{destination_folder}{file_name}"
+# Upload the CSV file to GCP (directly into the bucket, no folder)
+upload_blob(bucket_name, csv_file_path, file_name)
 
-    # Upload the most recent file to GCP
-    upload_blob(bucket_name, most_recent_file, destination_blob_name)
+# Optionally, remove the temporary directory after uploading the file
+# This helps clean up after the process completes
+os.remove(csv_file_path)
+os.rmdir(download_dir)
