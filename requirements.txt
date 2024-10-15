@@ -2,3 +2,4 @@ imaplib2
 requests
 selenium
 google-cloud-storage
+webdriver-manager
