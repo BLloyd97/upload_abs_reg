@@ -13,7 +13,7 @@ import tempfile
 
 # Email login credentials
 username = 'brian@nmdemocrats.org'
-app_password = 'oivb bzqb rtcx bbpz'  # Use your app-specific password
+app_password = os.getenv('GMAIL_PASS')
 
 # Connect to Gmail's IMAP server
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
@@ -93,11 +93,8 @@ else:
 
 # Step 3: Upload the file to Google Cloud Storage
 
-# # Path to your service account key JSON file
-# service_account_key_path = r"C:\Users\brian\Documents\JSON_key_google_service_account\BigQuery_creds.json" # Update this with your path
-
 # # Initialize a storage client with the service account key
-# client = storage.Client.from_service_account_json(service_account_key_path)
+# client = storage.Client()
 
 # # Specify the bucket name and the destination path
 # bucket_name = 'demsnmsp-avev'
