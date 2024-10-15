@@ -1,14 +1,19 @@
 import imaplib
 import email
+from email.header import decode_header
 import re
-import time
-import tempfile
 import os
+import tempfile
+import requests
+import time
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from google.cloud import storage  # Import the Google Cloud Storage library
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from google.cloud import storage  # Import for uploading to GCP
 
 # Email login credentials
 username = 'brian@nmdemocrats.org'
@@ -49,8 +54,10 @@ for response_part in msg_data:
         if msg.is_multipart():
             for part in msg.walk():
                 if part.get_content_type() == "text/plain":
+                    # Decode and extract the email body
                     email_body = part.get_payload(decode=True).decode()
         else:
+            # If it's not multipart, it's likely plain text
             email_body = msg.get_payload(decode=True).decode()
 
 # Adjusted regular expression to stop at space, new line, or HTML tag
@@ -62,15 +69,28 @@ else:
     print("No link found in the email.")
     exit()  # Exit if no link found
 
-# Step 2: Use Selenium to follow the absentee voting link and submit your email
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))  # Ensure the correct ChromeDriver is used
+# Create a temporary directory for downloading files
+temp_dir = tempfile.mkdtemp()
+print(f"Using temporary directory: {temp_dir}")
+
+# Set up Chrome options for headless mode
+chrome_options = Options()
+chrome_options.add_argument("--headless")  # Run in headless mode
+chrome_options.add_argument("--no-sandbox")  # Bypass OS security model
+chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+chrome_options.add_argument(f"--user-data-dir={temp_dir}")  # Use the temp directory for user data
+
+# Initialize the Chrome driver
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+
+# Step 1: Follow the absentee voting link
 driver.get(absentee_voting_link)
 
-# Wait for the page to load completely
-time.sleep(5)  # Adjust sleep time as necessary for your internet speed
+# Step 2: Wait for the email input box to be present and then enter your email
+email_input_locator = (By.NAME, "ctl00$MainContent$txtEmail")  # Adjust based on your input element
+WebDriverWait(driver, 10).until(EC.presence_of_element_located(email_input_locator))
 
-# Find the email input box and submit the email address
-email_input = driver.find_element(By.NAME, "ctl00$MainContent$txtEmail")
+email_input = driver.find_element(*email_input_locator)
 email_input.send_keys('brian@nmdemocrats.org')  # Enter your email address
 
 # Submit the form
