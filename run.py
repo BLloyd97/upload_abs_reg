@@ -101,7 +101,7 @@ else:
 # destination_folder = 'inbox/20241105_general/statewide/'
 
 # # Path to the folder where your CSV files are saved
-# csv_folder_path = r"C:\Users\brian\Documents\dpnm\AVEV\2024g"
+# csv_folder_path = tempfile.gettempdir()  # Use the system's temporary directory
 
 # # Function to find the most recent file in the directory
 # def get_most_recent_file(folder_path):
@@ -138,11 +138,8 @@ import os
 import glob
 from google.cloud import storage
 
-# Path to your service account key JSON file
-service_account_key_path = r"C:\Users\brian\Documents\JSON_key_google_service_account\BigQuery_creds.json"  # Update this with your path
-
 # Initialize a storage client with the service account key
-client = storage.Client.from_service_account_json(service_account_key_path)
+client = storage.Client()
 
 # Specify the bucket name (no folder)
 bucket_name = 'demsnmsp-uploads'
