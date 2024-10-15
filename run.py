@@ -4,15 +4,9 @@ from email.header import decode_header
 import re
 import os
 import tempfile
-import requests
 import time
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import asyncio
+from pyppeteer import launch
 from google.cloud import storage  # Import for uploading to GCP
 
 # Email login credentials
@@ -69,43 +63,39 @@ else:
     print("No link found in the email.")
     exit()  # Exit if no link found
 
-# Create a temporary directory for downloading files
-temp_dir = tempfile.mkdtemp()
-print(f"Using temporary directory: {temp_dir}")
-
-# Set up Chrome options for headless mode
-chrome_options = Options()
-chrome_options.add_argument("--headless")  # Run in headless mode
-chrome_options.add_argument("--no-sandbox")  # Bypass OS security model
-chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
-chrome_options.add_argument(f"--user-data-dir={temp_dir}")  # Use the temp directory for user data
-
-# Initialize the Chrome driver
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-
-# Step 1: Follow the absentee voting link
-driver.get(absentee_voting_link)
-
-# Step 2: Wait for the email input box to be present and then enter your email
-email_input_locator = (By.NAME, "ctl00$MainContent$txtEmail")  # Adjust based on your input element
-WebDriverWait(driver, 10).until(EC.presence_of_element_located(email_input_locator))
-
-email_input = driver.find_element(*email_input_locator)
-email_input.send_keys('brian@nmdemocrats.org')  # Enter your email address
-
-# Submit the form
-email_input.submit()  # Or find the submit button and click it
-
-# Optional: Wait for a moment to ensure the submission is processed
-time.sleep(5)
-
 # Create a temporary directory for downloads
 with tempfile.TemporaryDirectory() as temp_dir:
-    print(f"Temporary download directory created at: {temp_dir}")
+    print(f"Using temporary directory: {temp_dir}")
+
+    # Set up pyppeteer options
+    browser = asyncio.get_event_loop().run_until_complete(launch(headless=True))
+    page = asyncio.get_event_loop().run_until_complete(browser.newPage())
+
+    # Set the download behavior to use the temporary directory
+    asyncio.get_event_loop().run_until_complete(page._client.send('Page.setDownloadBehavior', {
+        'behavior': 'allow',
+        'downloadPath': temp_dir,
+    }))
+
+    # Step 1: Follow the absentee voting link
+    asyncio.get_event_loop().run_until_complete(page.goto(absentee_voting_link))
+
+    # Step 2: Wait for the email input box to be present and then enter your email
+    email_input_locator = 'input[name="ctl00$MainContent$txtEmail"]'  # Adjust based on your input element
+    asyncio.get_event_loop().run_until_complete(page.waitForSelector(email_input_locator))
+
+    # Enter your email address
+    asyncio.get_event_loop().run_until_complete(page.type(email_input_locator, 'brian@nmdemocrats.org'))
+
+    # Submit the form
+    await page.click('input[type="submit"]')  # Adjust based on the submit button
+
+    # Optional: Wait for a moment to ensure the submission is processed
+    await page.waitForTimeout(5000)
 
     # Check for the file download
     downloaded_file_path = ""
-    timeout = 120  # Timeout after 60 seconds
+    timeout = 120  # Timeout after 120 seconds
     start_time = time.time()
 
     while time.time() - start_time < timeout:
@@ -122,7 +112,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
 
     if not downloaded_file_path:
         print("File did not download within the timeout period.")
-        driver.quit()
+        asyncio.get_event_loop().run_until_complete(browser.close())
         exit()
 
     # Upload to Google Cloud Storage
@@ -136,4 +126,4 @@ with tempfile.TemporaryDirectory() as temp_dir:
     print("File uploaded to GCP successfully.")
 
 # Close the browser
-driver.quit()
+asyncio.get_event_loop().run_until_complete(browser.close())
